@@ -1,9 +1,22 @@
 import streamlit as st
 import difflib
 import streamlit.components.v1 as components
-from utils import load_file, format_hex_data, compare_files_side_by_side
-from styles import get_custom_css
 
+# Function to load file content
+def load_file(file):
+    return file.getvalue().decode("utf-8")
+
+# Function to format binary data (for '.bin' files)
+def format_hex_data(data):
+    return '\n'.join([f"{i:08x}: {data[i:i+16].hex()}" for i in range(0, len(data), 16)])
+
+# Function to compare files line by line and return the diff
+def compare_files_side_by_side(file1_data, file2_data, file1_name, file2_name):
+    diff = difflib.HtmlDiff()
+    diff_html = diff.make_file(file1_data.splitlines(), file2_data.splitlines(), file1_name, file2_name)
+    return diff_html
+
+# Function to display the diff legend
 def display_diff_legend():
     """
     Displays a legend explaining the diff colors and symbols.
@@ -26,6 +39,7 @@ def display_diff_legend():
     """
     st.markdown(legend_html, unsafe_allow_html=True)
 
+# Function to display content based on the file type
 def display_content(content, file_name=None):
     """
     Displays content with appropriate formatting based on file type.
@@ -35,13 +49,11 @@ def display_content(content, file_name=None):
     else:
         st.text(content)
 
+# Main app function
 def main():
     st.set_page_config(page_title="File Comparison Tool", layout="wide")
     st.title("📄 File Comparison Tool")
     
-    # Apply custom CSS
-    st.markdown(get_custom_css(), unsafe_allow_html=True)
-
     # Input method selection
     input_method = st.radio(
         "Choose input method:",
