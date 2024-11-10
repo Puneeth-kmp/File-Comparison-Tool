@@ -208,7 +208,7 @@ def main():
         if logo:
             st.markdown(
                 """
-                <div class="logo-container" style="text-align: center;">
+                <div class="logo-container" style="display: flex; justify-content: center; align-items: center;">
                     <img src="data:image/png;base64,{}" style="width: 30%;">
                     <h1 class="header-text"></h1>
                 </div>
