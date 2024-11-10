@@ -210,7 +210,7 @@ def main():
                 """
                 <div class="logo-container">
                     <img src="data:image/png;base64,{}">
-                    <h1 class="header-text">📄 Professional File Comparison Tool</h1>
+                    <h1 class="header-text">File Comparison Tool</h1>
                 </div>
                 """.format(
                     base64.b64encode(BytesIO(requests.get(LOGO_URL).content).read()).decode()
@@ -218,7 +218,7 @@ def main():
                 unsafe_allow_html=True
             )
         else:
-            st.title("📄 Professional File Comparison Tool")
+            st.title("File Comparison Tool")
     with col2:
         st.caption(f"Version 1.0.0\nLast updated: {datetime.now().strftime('%Y-%m-%d')}")
 
