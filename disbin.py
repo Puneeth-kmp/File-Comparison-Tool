@@ -1,82 +1,84 @@
 import streamlit as st
 import difflib
 import streamlit.components.v1 as components
-from pygments import highlight
-from pygments.lexers import guess_lexer_for_filename, TextLexer
-from pygments.formatters import HtmlFormatter
 
 # Function to load file content
 def load_file(file):
     return file.getvalue().decode("utf-8")
 
-# Function to format binary data (for '.bin' files)
+# Function to format binary data for '.bin' files
 def format_hex_data(data):
     return '\n'.join([f"{i:08x}: {data[i:i+16].hex()}" for i in range(0, len(data), 16)])
 
-# Function to syntax-highlight code based on file type
-def syntax_highlight(code, filename):
-    try:
-        lexer = guess_lexer_for_filename(filename, code)
-    except Exception:
-        lexer = TextLexer()
-    formatter = HtmlFormatter(cssclass="highlight")
-    return highlight(code, lexer, formatter)
-
-# Function to generate detailed side-by-side diff with line and word highlights
-def generate_detailed_side_by_side_diff(file1_data, file2_data, filename1, filename2):
+# Function to generate side-by-side diff with line and word highlights
+def generate_side_by_side_diff(file1_data, file2_data):
     file1_lines = file1_data.splitlines()
     file2_lines = file2_data.splitlines()
     
     # Generate line-by-line diff
     diff = difflib.ndiff(file1_lines, file2_lines)
     
-    # Initialize HTML layout with syntax highlighting and word differences
+    # Initialize HTML layout with line numbering and word highlights
     html_content = """
     <style>
         .diff-table { width: 100%; border-collapse: collapse; }
         .diff-table td { padding: 5px; vertical-align: top; font-family: monospace; }
         .line-num { width: 5%; background-color: #f0f0f0; text-align: right; padding-right: 10px; }
-        .added { background-color: #e8f5e9; }
-        .removed { background-color: #ffebee; }
-        .modified { background-color: #fff3e0; }
-        .highlight { color: #000; }
+        .added { background-color: #e6ffe6; }
+        .removed { background-color: #ffe6e6; }
+        .modified { background-color: #ffffcc; }
     </style>
     <table class="diff-table">
         <tr>
-            <th>File 1</th>
-            <th>File 2</th>
+            <th>File 1 (Line No)</th>
+            <th>File 1 Content</th>
+            <th>File 2 (Line No)</th>
+            <th>File 2 Content</th>
         </tr>
     """
+    
+    # Track line numbers for each file
+    line_num1, line_num2 = 1, 1
 
     # Process each diff line with word-level changes
     for line in diff:
         tag = line[:2]
         content = line[2:]
+        
         if tag == "  ":  # No change
-            left, right = content, content
+            left = f"<td class='line-num'>{line_num1}</td><td>{content}</td>"
+            right = f"<td class='line-num'>{line_num2}</td><td>{content}</td>"
+            line_num1 += 1
+            line_num2 += 1
         elif tag == "- ":  # Line removed
-            left, right = f"<span class='removed'>{content}</span>", ""
+            left = f"<td class='line-num'>{line_num1}</td><td class='removed'>{content}</td>"
+            right = "<td></td><td></td>"  # No corresponding line in File 2
+            line_num1 += 1
         elif tag == "+ ":  # Line added
-            left, right = "", f"<span class='added'>{content}</span>"
+            left = "<td></td><td></td>"  # No corresponding line in File 1
+            right = f"<td class='line-num'>{line_num2}</td><td class='added'>{content}</td>"
+            line_num2 += 1
         elif tag == "? ":  # Word modifications within lines
-            left, right = highlight_words(file1_data, file2_data, content, tag)
+            # This section adds highlighting for modified words within changed lines
+            left_words, right_words = highlight_words(file1_lines, file2_lines, line_num1, line_num2)
+            left = f"<td class='line-num'>{line_num1}</td><td class='modified'>{left_words}</td>"
+            right = f"<td class='line-num'>{line_num2}</td><td class='modified'>{right_words}</td>"
+            line_num1 += 1
+            line_num2 += 1
 
-        # Syntax highlighting for each line content
-        left = syntax_highlight(left, filename1) if left else ""
-        right = syntax_highlight(right, filename2) if right else ""
-        html_content += f"<tr><td>{left}</td><td>{right}</td></tr>"
+        html_content += f"<tr>{left}{right}</tr>"
 
     html_content += "</table>"
     return html_content
 
-# Helper function for detailed word-level highlighting
-def highlight_words(file1_data, file2_data, content, tag):
-    # Use SequenceMatcher for finer word-level differences within the line
-    s = difflib.SequenceMatcher(None, file1_data, file2_data)
+# Helper function for word-level highlighting
+def highlight_words(file1_lines, file2_lines, line_num1, line_num2):
+    s = difflib.SequenceMatcher(None, file1_lines[line_num1 - 1], file2_lines[line_num2 - 1])
     output1, output2 = [], []
+    
     for opcode, i1, i2, j1, j2 in s.get_opcodes():
-        word1 = file1_data[i1:i2]
-        word2 = file2_data[j1:j2]
+        word1 = file1_lines[line_num1 - 1][i1:i2]
+        word2 = file2_lines[line_num2 - 1][j1:j2]
         if opcode == 'equal':
             output1.append(word1)
             output2.append(word2)
@@ -124,9 +126,7 @@ def main():
 
                 st.subheader(f"🔍 Comparing `{file1.name}` and `{file2.name}`:")
                 if file1_data and file2_data:
-                    diff_html = generate_detailed_side_by_side_diff(
-                        file1_data, file2_data, file1.name, file2.name
-                    )
+                    diff_html = generate_side_by_side_diff(file1_data, file2_data)
                     components.html(diff_html, height=800, scrolling=True)
                 else:
                     st.error("One or both files could not be read. Please ensure they are valid and try again.")
@@ -158,9 +158,7 @@ def main():
         if st.button("🔍 Compare Texts", type="primary"):
             if text1 and text2:
                 st.subheader(f"🔍 Comparing `{name1}` and `{name2}`:")
-                diff_html = generate_detailed_side_by_side_diff(
-                    text1, text2, name1, name2
-                )
+                diff_html = generate_side_by_side_diff(text1, text2)
                 components.html(diff_html, height=800, scrolling=True)
             else:
                 st.warning("Please enter text for both fields to compare.")
