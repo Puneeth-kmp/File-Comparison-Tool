@@ -202,23 +202,25 @@ def main():
     """, unsafe_allow_html=True)
 
     # Header with logo and title
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        logo = load_github_image(LOGO_URL)
-        if logo:
-            st.markdown(
-                """
-                <div class="logo-container">
-                    <img src="data:image/png;base64,{}">
-                    <h1 class="header-text">📄 Professional File Comparison Tool</h1>
-                </div>
-                """.format(
-                    base64.b64encode(BytesIO(requests.get(LOGO_URL).content).read()).decode()
-                ),
-                unsafe_allow_html=True
-            )
-        else:
-            st.title("📄 Professional File Comparison Tool")
+    # Header with logo and title
+col1, col2 = st.columns([3, 1])
+with col1:
+    logo = load_github_image(LOGO_URL)
+    if logo:
+        st.markdown(
+            """
+            <div class="logo-container">
+                <img src="data:image/png;base64,{}" style="width: 10%;">
+                <h1 class="header-text">📄 Professional File Comparison Tool</h1>
+            </div>
+            """.format(
+                base64.b64encode(BytesIO(requests.get(LOGO_URL).content).read()).decode()
+            ),
+            unsafe_allow_html=True
+        )
+    else:
+        st.title("📄 Professional File Comparison Tool")
+
     with col2:
         st.caption(f"Version 1.0.0\nLast updated: {datetime.now().strftime('%Y-%m-%d')}")
 
