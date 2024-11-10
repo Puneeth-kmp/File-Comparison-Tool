@@ -96,9 +96,11 @@ def highlight_words(file1_lines, file2_lines, line_num1, line_num2):
 def main():
     st.set_page_config(page_title="File Comparison Tool", layout="wide")
     
-    # Add the logo
-    logo_url = "https://github.com/Puneeth-kmp/File-Comparison-Tool/blob/main/Picsart_24-11-10_15-02-57-542.png?raw=true"
-    st.image(logo_url, use_column_width=True)  # Logo fits the column width
+    # Base64 encoded logo image (replace this string with your own Base64 string)
+    logo_base64 = "YOUR_BASE64_ENCODED_LOGO_HERE"
+
+    # Display the image using the Base64 string and scale it to a smaller size
+    st.image(f"data:image/png;base64,{logo_base64}", use_column_width=False, width=200)
 
     st.title("📄 File Comparison Tool")
 
