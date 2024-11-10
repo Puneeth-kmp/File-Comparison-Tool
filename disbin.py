@@ -209,8 +209,8 @@ def main():
             st.markdown(
                 """
                 <div class="logo-container">
-                    <img src="data:image/png;base64,{}">
-                    <h1 class="header-text">File Comparison Tool</h1>
+                    <img src="data:image/png;base64,{}" style="width: 30%;">
+                    <h1 class="header-text"></h1>
                 </div>
                 """.format(
                     base64.b64encode(BytesIO(requests.get(LOGO_URL).content).read()).decode()
@@ -218,7 +218,7 @@ def main():
                 unsafe_allow_html=True
             )
         else:
-            st.title("File Comparison Tool")
+            st.title("")
     with col2:
         st.caption(f"Version 1.0.0\nLast updated: {datetime.now().strftime('%Y-%m-%d')}")
 
