@@ -1,6 +1,9 @@
 import streamlit as st
 import difflib
 import streamlit.components.v1 as components
+from pygments import highlight
+from pygments.lexers import guess_lexer_for_filename, TextLexer
+from pygments.formatters import HtmlFormatter
 
 # Function to load file content
 def load_file(file):
@@ -10,15 +13,24 @@ def load_file(file):
 def format_hex_data(data):
     return '\n'.join([f"{i:08x}: {data[i:i+16].hex()}" for i in range(0, len(data), 16)])
 
-# Function to create a custom side-by-side diff view
-def generate_side_by_side_diff(file1_data, file2_data):
+# Function to syntax-highlight code based on file type
+def syntax_highlight(code, filename):
+    try:
+        lexer = guess_lexer_for_filename(filename, code)
+    except Exception:
+        lexer = TextLexer()
+    formatter = HtmlFormatter(cssclass="highlight")
+    return highlight(code, lexer, formatter)
+
+# Function to generate detailed side-by-side diff with line and word highlights
+def generate_detailed_side_by_side_diff(file1_data, file2_data, filename1, filename2):
     file1_lines = file1_data.splitlines()
     file2_lines = file2_data.splitlines()
     
-    # Generate side-by-side comparison using difflib
+    # Generate line-by-line diff
     diff = difflib.ndiff(file1_lines, file2_lines)
     
-    # HTML style and layout setup for side-by-side display
+    # Initialize HTML layout with syntax highlighting and word differences
     html_content = """
     <style>
         .diff-table { width: 100%; border-collapse: collapse; }
@@ -27,6 +39,7 @@ def generate_side_by_side_diff(file1_data, file2_data):
         .added { background-color: #e8f5e9; }
         .removed { background-color: #ffebee; }
         .modified { background-color: #fff3e0; }
+        .highlight { color: #000; }
     </style>
     <table class="diff-table">
         <tr>
@@ -35,21 +48,47 @@ def generate_side_by_side_diff(file1_data, file2_data):
         </tr>
     """
 
+    # Process each diff line with word-level changes
     for line in diff:
         tag = line[:2]
         content = line[2:]
-
         if tag == "  ":  # No change
-            html_content += f"<tr><td>{content}</td><td>{content}</td></tr>"
-        elif tag == "- ":  # Line removed from file1
-            html_content += f"<tr><td class='removed'>{content}</td><td></td></tr>"
-        elif tag == "+ ":  # Line added in file2
-            html_content += f"<tr><td></td><td class='added'>{content}</td></tr>"
-        elif tag == "? ":  # Line modified
-            html_content += f"<tr><td class='modified'>{content}</td><td class='modified'>{content}</td></tr>"
+            left, right = content, content
+        elif tag == "- ":  # Line removed
+            left, right = f"<span class='removed'>{content}</span>", ""
+        elif tag == "+ ":  # Line added
+            left, right = "", f"<span class='added'>{content}</span>"
+        elif tag == "? ":  # Word modifications within lines
+            left, right = highlight_words(file1_data, file2_data, content, tag)
+
+        # Syntax highlighting for each line content
+        left = syntax_highlight(left, filename1) if left else ""
+        right = syntax_highlight(right, filename2) if right else ""
+        html_content += f"<tr><td>{left}</td><td>{right}</td></tr>"
 
     html_content += "</table>"
     return html_content
+
+# Helper function for detailed word-level highlighting
+def highlight_words(file1_data, file2_data, content, tag):
+    # Use SequenceMatcher for finer word-level differences within the line
+    s = difflib.SequenceMatcher(None, file1_data, file2_data)
+    output1, output2 = [], []
+    for opcode, i1, i2, j1, j2 in s.get_opcodes():
+        word1 = file1_data[i1:i2]
+        word2 = file2_data[j1:j2]
+        if opcode == 'equal':
+            output1.append(word1)
+            output2.append(word2)
+        elif opcode == 'insert':
+            output2.append(f"<span class='added'>{word2}</span>")
+        elif opcode == 'delete':
+            output1.append(f"<span class='removed'>{word1}</span>")
+        elif opcode == 'replace':
+            output1.append(f"<span class='modified'>{word1}</span>")
+            output2.append(f"<span class='modified'>{word2}</span>")
+
+    return " ".join(output1), " ".join(output2)
 
 # Main app function
 def main():
@@ -77,6 +116,7 @@ def main():
                 file1_data = load_file(file1)
                 file2_data = load_file(file2)
 
+                # Format binary files
                 if file1.name.endswith('.bin'):
                     file1_data = format_hex_data(file1_data)
                 if file2.name.endswith('.bin'):
@@ -84,11 +124,12 @@ def main():
 
                 st.subheader(f"🔍 Comparing `{file1.name}` and `{file2.name}`:")
                 if file1_data and file2_data:
-                    diff_html = generate_side_by_side_diff(file1_data, file2_data)
+                    diff_html = generate_detailed_side_by_side_diff(
+                        file1_data, file2_data, file1.name, file2.name
+                    )
                     components.html(diff_html, height=800, scrolling=True)
                 else:
                     st.error("One or both files could not be read. Please ensure they are valid and try again.")
-
             else:
                 st.warning("⚠️ Please upload exactly two files for comparison.")
 
@@ -117,7 +158,9 @@ def main():
         if st.button("🔍 Compare Texts", type="primary"):
             if text1 and text2:
                 st.subheader(f"🔍 Comparing `{name1}` and `{name2}`:")
-                diff_html = generate_side_by_side_diff(text1, text2)
+                diff_html = generate_detailed_side_by_side_diff(
+                    text1, text2, name1, name2
+                )
                 components.html(diff_html, height=800, scrolling=True)
             else:
                 st.warning("Please enter text for both fields to compare.")
