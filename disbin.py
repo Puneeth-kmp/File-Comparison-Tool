@@ -218,7 +218,7 @@ def main():
                 unsafe_allow_html=True
             )
         else:
-            st.title("📄 Professional File Comparison Tool")
+            st.title("File Comparison Tool")
     with col2:
         st.caption(f"Version 1.0.0\nLast updated: {datetime.now().strftime('%Y-%m-%d')}")
 
