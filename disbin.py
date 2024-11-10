@@ -98,7 +98,7 @@ def main():
     
     # Add the logo
     logo_url = "https://github.com/Puneeth-kmp/File-Comparison-Tool/blob/main/Picsart_24-11-10_15-02-57-542.png?raw=true"
-    st.image(logo_url, use_column_width=True)
+    st.image(logo_url, use_column_width=True)  # Logo fits the column width
 
     st.title("📄 File Comparison Tool")
 
