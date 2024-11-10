@@ -1,148 +1,234 @@
 import streamlit as st
 import difflib
 import base64
+from pathlib import Path
 import streamlit.components.v1 as components
+from typing import Tuple, Optional
+import io
+import logging
+from datetime import datetime
 
-# Function to load file content
-def load_file(file):
-    return file.getvalue().decode("utf-8")
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-# Function to format binary data for '.bin' files
-def format_hex_data(data):
-    return '\n'.join([f"{i:08x}: {data[i:i+16].hex()}" for i in range(0, len(data), 16)])
+# Constants
+SUPPORTED_TEXT_EXTENSIONS = {'.c', '.h', '.cpp', '.txt', '.py', '.json', '.yaml', '.yml', '.md', '.css', '.html', '.js'}
+SUPPORTED_BINARY_EXTENSIONS = {'.bin', '.hex'}
+MAX_FILE_SIZE_MB = 10
 
-# Function to generate side-by-side diff with line and word highlights
-def generate_side_by_side_diff(file1_data, file2_data):
-    file1_lines = file1_data.splitlines()
-    file2_lines = file2_data.splitlines()
-    
-    # Generate line-by-line diff
-    diff = difflib.ndiff(file1_lines, file2_lines)
-    
-    # Initialize HTML layout with line numbering and word highlights
-    html_content = """
-    <style>
-        .diff-table { width: 100%; border-collapse: collapse; }
-        .diff-table td { padding: 5px; vertical-align: top; font-family: monospace; }
-        .line-num { width: 5%; background-color: #f0f0f0; text-align: right; padding-right: 10px; }
-        .added { background-color: #e6ffe6; }
-        .removed { background-color: #ffe6e6; }
-        .modified { background-color: #ffffcc; }
-    </style>
-    <table class="diff-table">
-        <tr>
-            <th>File 1 (Line No)</th>
-            <th>File 1 Content</th>
-            <th>File 2 (Line No)</th>
-            <th>File 2 Content</th>
-        </tr>
-    """
-    
-    # Track line numbers for each file
-    line_num1, line_num2 = 1, 1
-
-    # Process each diff line with word-level changes
-    for line in diff:
-        tag = line[:2]
-        content = line[2:]
+class FileComparisonTool:
+    def __init__(self):
+        self.config = {
+            'max_file_size_mb': MAX_FILE_SIZE_MB,
+            'supported_text_extensions': SUPPORTED_TEXT_EXTENSIONS,
+            'supported_binary_extensions': SUPPORTED_BINARY_EXTENSIONS,
+        }
         
-        if tag == "  ":  # No change
-            left = f"<td class='line-num'>{line_num1}</td><td>{content}</td>"
-            right = f"<td class='line-num'>{line_num2}</td><td>{content}</td>"
-            line_num1 += 1
-            line_num2 += 1
-        elif tag == "- ":  # Line removed
-            left = f"<td class='line-num'>{line_num1}</td><td class='removed'>{content}</td>"
-            right = "<td></td><td></td>"  # No corresponding line in File 2
-            line_num1 += 1
-        elif tag == "+ ":  # Line added
-            left = "<td></td><td></td>"  # No corresponding line in File 1
-            right = f"<td class='line-num'>{line_num2}</td><td class='added'>{content}</td>"
-            line_num2 += 1
-        elif tag == "? ":  # Word modifications within lines
-            if line_num1 - 1 < len(file1_lines) and line_num2 - 1 < len(file2_lines):
-                left_words, right_words = highlight_words(file1_lines, file2_lines, line_num1, line_num2)
-                left = f"<td class='line-num'>{line_num1}</td><td class='modified'>{left_words}</td>"
-                right = f"<td class='line-num'>{line_num2}</td><td class='modified'>{right_words}</td>"
-            line_num1 += 1
-            line_num2 += 1
+    @staticmethod
+    def load_file_content(file) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Load and validate file content
+        Returns: (content, error_message)
+        """
+        try:
+            # Check file size
+            file_size_mb = len(file.getvalue()) / (1024 * 1024)
+            if file_size_mb > MAX_FILE_SIZE_MB:
+                return None, f"File size exceeds {MAX_FILE_SIZE_MB}MB limit"
+            
+            content = file.getvalue().decode("utf-8")
+            return content, None
+        except UnicodeDecodeError:
+            return None, "File appears to be binary or contains invalid characters"
+        except Exception as e:
+            logger.error(f"Error loading file: {str(e)}")
+            return None, f"Error loading file: {str(e)}"
 
-        html_content += f"<tr>{left}{right}</tr>"
+    @staticmethod
+    def format_hex_data(data: bytes, bytes_per_line: int = 16) -> str:
+        """Format binary data as hex dump"""
+        lines = []
+        for i in range(0, len(data), bytes_per_line):
+            chunk = data[i:i + bytes_per_line]
+            hex_dump = ' '.join(f'{b:02x}' for b in chunk)
+            ascii_dump = ''.join(chr(b) if 32 <= b <= 126 else '.' for b in chunk)
+            lines.append(f"{i:08x}:  {hex_dump:<{bytes_per_line*3}}  |{ascii_dump}|")
+        return '\n'.join(lines)
 
-    html_content += "</table>"
-    return html_content
+    def generate_diff_html(self, file1_data: str, file2_data: str) -> str:
+        """Generate HTML for side-by-side diff view with enhanced styling"""
+        html_content = """
+        <style>
+            .diff-container { font-family: 'Monaco', 'Consolas', monospace; }
+            .diff-table { width: 100%; border-collapse: collapse; border: 1px solid #ddd; }
+            .diff-table td { padding: 5px 10px; vertical-align: top; border: 1px solid #ddd; }
+            .line-num { 
+                width: 50px;
+                background-color: #f8f9fa;
+                color: #6c757d;
+                text-align: right;
+                user-select: none;
+                border-right: 1px solid #ddd;
+            }
+            .added { background-color: #e6ffe6; }
+            .removed { background-color: #ffe6e6; }
+            .modified { background-color: #fff5b1; }
+            .diff-header { 
+                background-color: #f8f9fa;
+                font-weight: bold;
+                text-align: center;
+                padding: 10px;
+                border-bottom: 2px solid #ddd;
+            }
+            .word-added { background-color: #a6f3a6; }
+            .word-removed { background-color: #f8a6a6; }
+            .word-modified { background-color: #fee090; }
+        </style>
+        <div class="diff-container">
+        <table class="diff-table">
+            <tr>
+                <th colspan="2" class="diff-header">Original File</th>
+                <th colspan="2" class="diff-header">Modified File</th>
+            </tr>
+        """
+        
+        # Generate diff using difflib
+        file1_lines = file1_data.splitlines()
+        file2_lines = file2_data.splitlines()
+        line_diff = difflib.ndiff(file1_lines, file2_lines)
+        
+        line_num1, line_num2 = 1, 1
+        
+        for line in line_diff:
+            tag = line[:2]
+            content = line[2:]
+            
+            if tag == "  ":  # Unchanged line
+                html_content += f"""
+                    <tr>
+                        <td class="line-num">{line_num1}</td>
+                        <td>{content}</td>
+                        <td class="line-num">{line_num2}</td>
+                        <td>{content}</td>
+                    </tr>
+                """
+                line_num1 += 1
+                line_num2 += 1
+                
+            elif tag == "- ":  # Removed line
+                html_content += f"""
+                    <tr>
+                        <td class="line-num">{line_num1}</td>
+                        <td class="removed">{content}</td>
+                        <td class="line-num"></td>
+                        <td></td>
+                    </tr>
+                """
+                line_num1 += 1
+                
+            elif tag == "+ ":  # Added line
+                html_content += f"""
+                    <tr>
+                        <td class="line-num"></td>
+                        <td></td>
+                        <td class="line-num">{line_num2}</td>
+                        <td class="added">{content}</td>
+                    </tr>
+                """
+                line_num2 += 1
 
-# Helper function for word-level highlighting
-def highlight_words(file1_lines, file2_lines, line_num1, line_num2):
-    s = difflib.SequenceMatcher(None, file1_lines[line_num1 - 1], file2_lines[line_num2 - 1])
-    output1, output2 = [], []
-    
-    for opcode, i1, i2, j1, j2 in s.get_opcodes():
-        word1 = file1_lines[line_num1 - 1][i1:i2]
-        word2 = file2_lines[line_num2 - 1][j1:j2]
-        if opcode == 'equal':
-            output1.append(word1)
-            output2.append(word2)
-        elif opcode == 'insert':
-            output2.append(f"<span class='added'>{word2}</span>")
-        elif opcode == 'delete':
-            output1.append(f"<span class='removed'>{word1}</span>")
-        elif opcode == 'replace':
-            output1.append(f"<span class='modified'>{word1}</span>")
-            output2.append(f"<span class='modified'>{word2}</span>")
+        html_content += "</table></div>"
+        return html_content
 
-    return " ".join(output1), " ".join(output2)
-
-# Function to convert an image file to Base64
-def image_to_base64(image_path):
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode("utf-8")
-
-# Main app function
 def main():
-    st.set_page_config(page_title="File Comparison Tool", layout="wide")
-    
-    # Base64 logo string
-    logo_base64 = "YOUR_BASE64_ENCODED_LOGO_HERE"  # Replace with actual Base64 string
+    st.set_page_config(
+        page_title="Professional File Comparison Tool",
+        page_icon="📄",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
 
-    # Display the logo using the Base64 string
-    st.image(f"data:image/png;base64,{logo_base64}", use_column_width=False, width=150)
+    # Initialize the tool
+    tool = FileComparisonTool()
 
-    st.title("📄 File Comparison Tool")
+    # Custom CSS for better UI
+    st.markdown("""
+        <style>
+            .stApp {
+                max-width: 1200px;
+                margin: 0 auto;
+            }
+            .main {
+                padding: 2rem;
+            }
+            .uploadedFile {
+                border: 1px solid #ddd;
+                padding: 1rem;
+                border-radius: 5px;
+            }
+        </style>
+    """, unsafe_allow_html=True)
 
-    # Input method selection
+    # Header with version info
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.title("📄 Professional File Comparison Tool")
+    with col2:
+        st.caption(f"Version 1.0.0\nLast updated: {datetime.now().strftime('%Y-%m-%d')}")
+
+    # Input method selection with better styling
     input_method = st.radio(
-        "Choose input method:",
+        "Select comparison method:",
         ["Upload Files", "Paste Text"],
-        horizontal=True
+        horizontal=True,
+        help="Choose how you want to compare content"
     )
 
     if input_method == "Upload Files":
+        st.info(f"""
+            📌 Supported file types:
+            - Text files: {', '.join(tool.config['supported_text_extensions'])}
+            - Binary files: {', '.join(tool.config['supported_binary_extensions'])}
+            - Maximum file size: {tool.config['max_file_size_mb']}MB
+        """)
+
         uploaded_files = st.file_uploader(
-            "Drag and drop files here or click to select",
-            type=["c", "h", "cpp", "txt", "bin", "py"],
+            "Upload files for comparison",
+            type=[ext[1:] for ext in tool.config['supported_text_extensions'].union(tool.config['supported_binary_extensions'])],
             accept_multiple_files=True,
-            help="Supported file types: .c, .h, .cpp, .txt, .bin, .py"
+            help="Upload exactly two files to compare"
         )
 
         if uploaded_files:
             if len(uploaded_files) == 2:
                 file1, file2 = uploaded_files
-                file1_data = load_file(file1)
-                file2_data = load_file(file2)
+                
+                # Load and validate files
+                file1_data, error1 = tool.load_file_content(file1)
+                file2_data, error2 = tool.load_file_content(file2)
 
-                # Format binary files
-                if file1.name.endswith('.bin'):
-                    file1_data = format_hex_data(file1_data)
-                if file2.name.endswith('.bin'):
-                    file2_data = format_hex_data(file2_data)
-
-                st.subheader(f"🔍 Comparing `{file1.name}` and `{file2.name}`:")
-                if file1_data and file2_data:
-                    diff_html = generate_side_by_side_diff(file1_data, file2_data)
-                    components.html(diff_html, height=800, scrolling=True)
+                if error1 or error2:
+                    if error1:
+                        st.error(f"Error in first file: {error1}")
+                    if error2:
+                        st.error(f"Error in second file: {error2}")
                 else:
-                    st.error("One or both files could not be read. Please ensure they are valid and try again.")
+                    st.success("Files loaded successfully!")
+                    with st.expander("📊 File Information", expanded=True):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown(f"**File 1:** `{file1.name}`")
+                            st.caption(f"Size: {len(file1.getvalue()) / 1024:.1f} KB")
+                        with col2:
+                            st.markdown(f"**File 2:** `{file2.name}`")
+                            st.caption(f"Size: {len(file2.getvalue()) / 1024:.1f} KB")
+
+                    diff_html = tool.generate_diff_html(file1_data, file2_data)
+                    components.html(diff_html, height=800, scrolling=True)
             else:
                 st.warning("⚠️ Please upload exactly two files for comparison.")
 
@@ -151,30 +237,46 @@ def main():
         
         with col1:
             text1 = st.text_area(
-                "First text content",
+                "Original Text",
                 height=300,
                 placeholder="Paste your first text here...",
-                key="text1"
+                help="Enter or paste the original text content"
             )
-            name1 = st.text_input("First text name (optional)", "Text 1")
+            name1 = st.text_input("Label for original text (optional)", "Original")
 
         with col2:
             text2 = st.text_area(
-                "Second text content",
+                "Modified Text",
                 height=300,
                 placeholder="Paste your second text here...",
-                key="text2"
+                help="Enter or paste the modified text content"
             )
-            name2 = st.text_input("Second text name (optional)", "Text 2")
+            name2 = st.text_input("Label for modified text (optional)", "Modified")
 
-        # Compare button
-        if st.button("🔍 Compare Texts", type="primary"):
+        if st.button("🔍 Compare", type="primary", use_container_width=True):
             if text1 and text2:
-                st.subheader(f"🔍 Comparing `{name1}` and `{name2}`:")
-                diff_html = generate_side_by_side_diff(text1, text2)
+                diff_html = tool.generate_diff_html(text1, text2)
                 components.html(diff_html, height=800, scrolling=True)
             else:
-                st.warning("Please enter text for both fields to compare.")
+                st.warning("Please enter text in both fields to compare.")
+
+    # Footer
+    st.markdown("---")
+    st.markdown(
+        """
+        <div style='text-align: center; color: #666;'>
+            <small>
+                Professional File Comparison Tool | Built with Streamlit
+                <br>For support, please open an issue on the project repository
+            </small>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        logger.error(f"Application error: {str(e)}")
+        st.error("An unexpected error occurred. Please try again or contact support if the problem persists.")
