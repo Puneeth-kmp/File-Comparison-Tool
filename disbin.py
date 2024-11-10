@@ -59,10 +59,11 @@ def generate_side_by_side_diff(file1_data, file2_data):
             right = f"<td class='line-num'>{line_num2}</td><td class='added'>{content}</td>"
             line_num2 += 1
         elif tag == "? ":  # Word modifications within lines
-            # This section adds highlighting for modified words within changed lines
-            left_words, right_words = highlight_words(file1_lines, file2_lines, line_num1, line_num2)
-            left = f"<td class='line-num'>{line_num1}</td><td class='modified'>{left_words}</td>"
-            right = f"<td class='line-num'>{line_num2}</td><td class='modified'>{right_words}</td>"
+            # Ensure indices are within bounds before highlighting words
+            if line_num1 - 1 < len(file1_lines) and line_num2 - 1 < len(file2_lines):
+                left_words, right_words = highlight_words(file1_lines, file2_lines, line_num1, line_num2)
+                left = f"<td class='line-num'>{line_num1}</td><td class='modified'>{left_words}</td>"
+                right = f"<td class='line-num'>{line_num2}</td><td class='modified'>{right_words}</td>"
             line_num1 += 1
             line_num2 += 1
 
