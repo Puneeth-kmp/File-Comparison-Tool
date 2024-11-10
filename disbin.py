@@ -10,11 +10,46 @@ def load_file(file):
 def format_hex_data(data):
     return '\n'.join([f"{i:08x}: {data[i:i+16].hex()}" for i in range(0, len(data), 16)])
 
-# Function to compare files line by line and return the HTML diff
-def compare_files_side_by_side(file1_data, file2_data, file1_name, file2_name):
-    diff = difflib.HtmlDiff()
-    diff_html = diff.make_file(file1_data.splitlines(), file2_data.splitlines(), file1_name, file2_name)
-    return diff_html
+# Function to create a custom side-by-side diff view
+def generate_side_by_side_diff(file1_data, file2_data):
+    file1_lines = file1_data.splitlines()
+    file2_lines = file2_data.splitlines()
+    
+    # Generate side-by-side comparison using difflib
+    diff = difflib.ndiff(file1_lines, file2_lines)
+    
+    # HTML style and layout setup for side-by-side display
+    html_content = """
+    <style>
+        .diff-table { width: 100%; border-collapse: collapse; }
+        .diff-table td { padding: 5px; vertical-align: top; font-family: monospace; }
+        .line-num { width: 5%; background-color: #f0f0f0; text-align: right; padding-right: 10px; }
+        .added { background-color: #e8f5e9; }
+        .removed { background-color: #ffebee; }
+        .modified { background-color: #fff3e0; }
+    </style>
+    <table class="diff-table">
+        <tr>
+            <th>File 1</th>
+            <th>File 2</th>
+        </tr>
+    """
+
+    for line in diff:
+        tag = line[:2]
+        content = line[2:]
+
+        if tag == "  ":  # No change
+            html_content += f"<tr><td>{content}</td><td>{content}</td></tr>"
+        elif tag == "- ":  # Line removed from file1
+            html_content += f"<tr><td class='removed'>{content}</td><td></td></tr>"
+        elif tag == "+ ":  # Line added in file2
+            html_content += f"<tr><td></td><td class='added'>{content}</td></tr>"
+        elif tag == "? ":  # Line modified
+            html_content += f"<tr><td class='modified'>{content}</td><td class='modified'>{content}</td></tr>"
+
+    html_content += "</table>"
+    return html_content
 
 # Main app function
 def main():
@@ -37,15 +72,7 @@ def main():
         )
 
         if uploaded_files:
-            if len(uploaded_files) == 1:
-                file = uploaded_files[0]
-                file_data = load_file(file)
-                if file.name.endswith('.bin'):
-                    file_data = format_hex_data(file_data)
-                st.subheader(f"📄 Content of `{file.name}`:")
-                st.text(file_data)
-
-            elif len(uploaded_files) == 2:
+            if len(uploaded_files) == 2:
                 file1, file2 = uploaded_files
                 file1_data = load_file(file1)
                 file2_data = load_file(file2)
@@ -57,13 +84,13 @@ def main():
 
                 st.subheader(f"🔍 Comparing `{file1.name}` and `{file2.name}`:")
                 if file1_data and file2_data:
-                    diff_html = compare_files_side_by_side(file1_data, file2_data, file1.name, file2.name)
+                    diff_html = generate_side_by_side_diff(file1_data, file2_data)
                     components.html(diff_html, height=800, scrolling=True)
                 else:
                     st.error("One or both files could not be read. Please ensure they are valid and try again.")
 
             else:
-                st.warning("⚠️ Please upload no more than two files for comparison.")
+                st.warning("⚠️ Please upload exactly two files for comparison.")
 
     else:  # Paste Text
         col1, col2 = st.columns(2)
@@ -88,16 +115,12 @@ def main():
 
         # Compare button
         if st.button("🔍 Compare Texts", type="primary"):
-            if text1 or text2:
-                if text1 and not text2:
-                    st.subheader(f"📄 Content of `{name1}`:")
-                    st.text(text1)
-                elif text1 and text2:
-                    st.subheader(f"🔍 Comparing `{name1}` and `{name2}`:")
-                    diff_html = compare_files_side_by_side(text1, text2, name1, name2)
-                    components.html(diff_html, height=800, scrolling=True)
-                else:
-                    st.warning("Please enter at least one text to display or two texts to compare.")
+            if text1 and text2:
+                st.subheader(f"🔍 Comparing `{name1}` and `{name2}`:")
+                diff_html = generate_side_by_side_diff(text1, text2)
+                components.html(diff_html, height=800, scrolling=True)
+            else:
+                st.warning("Please enter text for both fields to compare.")
 
 if __name__ == "__main__":
     main()
