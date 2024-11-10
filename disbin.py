@@ -1,5 +1,6 @@
 import streamlit as st
 import difflib
+import base64
 import streamlit.components.v1 as components
 
 # Function to load file content
@@ -92,15 +93,20 @@ def highlight_words(file1_lines, file2_lines, line_num1, line_num2):
 
     return " ".join(output1), " ".join(output2)
 
+# Function to convert an image file to Base64
+def image_to_base64(image_path):
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode("utf-8")
+
 # Main app function
 def main():
     st.set_page_config(page_title="File Comparison Tool", layout="wide")
     
-    # Base64 encoded logo image (replace this string with your own Base64 string)
-    logo_base64 = "YOUR_BASE64_ENCODED_LOGO_HERE"
+    # Base64 logo string
+    logo_base64 = "YOUR_BASE64_ENCODED_LOGO_HERE"  # Replace with actual Base64 string
 
-    # Display the image using the Base64 string and scale it to a smaller size
-    st.image(f"data:image/png;base64,{logo_base64}", use_column_width=False, width=200)
+    # Display the logo using the Base64 string
+    st.image(f"data:image/png;base64,{logo_base64}", use_column_width=False, width=150)
 
     st.title("📄 File Comparison Tool")
 
