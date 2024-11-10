@@ -7,6 +7,9 @@ from typing import Tuple, Optional
 import io
 import logging
 from datetime import datetime
+import requests
+from PIL import Image
+from io import BytesIO
 
 # Configure logging
 logging.basicConfig(
@@ -19,6 +22,7 @@ logger = logging.getLogger(__name__)
 SUPPORTED_TEXT_EXTENSIONS = {'.c', '.h', '.cpp', '.txt', '.py', '.json', '.yaml', '.yml', '.md', '.css', '.html', '.js'}
 SUPPORTED_BINARY_EXTENSIONS = {'.bin', '.hex'}
 MAX_FILE_SIZE_MB = 10
+LOGO_URL = "https://raw.githubusercontent.com/Puneeth-kmp/File-Comparison-Tool/main/Picsart_24-11-10_15-02-57-542.png"
 
 class FileComparisonTool:
     def __init__(self):
@@ -96,7 +100,6 @@ class FileComparisonTool:
             </tr>
         """
         
-        # Generate diff using difflib
         file1_lines = file1_data.splitlines()
         file2_lines = file2_data.splitlines()
         line_diff = difflib.ndiff(file1_lines, file2_lines)
@@ -144,6 +147,19 @@ class FileComparisonTool:
         html_content += "</table></div>"
         return html_content
 
+@st.cache_data
+def load_github_image(url: str) -> Optional[Image.Image]:
+    """
+    Load an image from a GitHub repository with caching
+    """
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        return Image.open(BytesIO(response.content))
+    except Exception as e:
+        logger.error(f"Error loading logo: {str(e)}")
+        return None
+
 def main():
     st.set_page_config(
         page_title="Professional File Comparison Tool",
@@ -170,13 +186,39 @@ def main():
                 padding: 1rem;
                 border-radius: 5px;
             }
+            .logo-container {
+                display: flex;
+                align-items: center;
+                gap: 20px;
+            }
+            .header-text {
+                color: #1E3A8A;
+                margin: 0;
+            }
+            .stMarkdown {
+                color: #4B5563;
+            }
         </style>
     """, unsafe_allow_html=True)
 
-    # Header with version info
+    # Header with logo and title
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.title("📄 Professional File Comparison Tool")
+        logo = load_github_image(LOGO_URL)
+        if logo:
+            st.markdown(
+                """
+                <div class="logo-container">
+                    <img src="data:image/png;base64,{}">
+                    <h1 class="header-text">📄 Professional File Comparison Tool</h1>
+                </div>
+                """.format(
+                    base64.b64encode(BytesIO(requests.get(LOGO_URL).content).read()).decode()
+                ),
+                unsafe_allow_html=True
+            )
+        else:
+            st.title("📄 Professional File Comparison Tool")
     with col2:
         st.caption(f"Version 1.0.0\nLast updated: {datetime.now().strftime('%Y-%m-%d')}")
 
