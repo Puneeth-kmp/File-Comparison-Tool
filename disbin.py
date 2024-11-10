@@ -172,7 +172,7 @@ def main():
     tool = FileComparisonTool()
 
     # Custom CSS for better UI
-    st.markdown(""" 
+    st.markdown("""
         <style>
             .stApp {
                 max-width: 1200px;
@@ -209,7 +209,7 @@ def main():
             st.markdown(
                 """
                 <div class="logo-container">
-                    <img src="data:image/png;base64,{}" width="10%">
+                    <img src="data:image/png;base64,{}">
                     <h1 class="header-text">📄 Professional File Comparison Tool</h1>
                 </div>
                 """.format(
@@ -252,21 +252,73 @@ def main():
                 # Load and validate files
                 file1_data, error1 = tool.load_file_content(file1)
                 file2_data, error2 = tool.load_file_content(file2)
-                
+
                 if error1 or error2:
-                    st.error(f"Error: {error1 or error2}")
+                    if error1:
+                        st.error(f"Error in first file: {error1}")
+                    if error2:
+                        st.error(f"Error in second file: {error2}")
                 else:
-                    # File data is ready for comparison
-                    st.markdown("### Comparison Result:")
-                    if file1.name.endswith(tuple(tool.config['supported_binary_extensions'])):
-                        st.text("File comparison for binary data is not supported yet.")
-                    else:
-                        diff_html = tool.generate_diff_html(file1_data, file2_data)
-                        components.html(diff_html, height=500)
+                    st.success("Files loaded successfully!")
+                    with st.expander("📊 File Information", expanded=True):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown(f"**File 1:** `{file1.name}`")
+                            st.caption(f"Size: {len(file1.getvalue()) / 1024:.1f} KB")
+                        with col2:
+                            st.markdown(f"**File 2:** `{file2.name}`")
+                            st.caption(f"Size: {len(file2.getvalue()) / 1024:.1f} KB")
+
+                    diff_html = tool.generate_diff_html(file1_data, file2_data)
+                    components.html(diff_html, height=800, scrolling=True)
             else:
-                st.warning("Please upload exactly two files for comparison.")
-    else:
-        st.text_area("Paste content from two files here for comparison", height=200)
+                st.warning("⚠️ Please upload exactly two files for comparison.")
+
+    else:  # Paste Text
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            text1 = st.text_area(
+                "Original Text",
+                height=300,
+                placeholder="Paste your first text here...",
+                help="Enter or paste the original text content"
+            )
+            name1 = st.text_input("Label for original text (optional)", "Original")
+
+        with col2:
+            text2 = st.text_area(
+                "Modified Text",
+                height=300,
+                placeholder="Paste your second text here...",
+                help="Enter or paste the modified text content"
+            )
+            name2 = st.text_input("Label for modified text (optional)", "Modified")
+
+        if st.button("🔍 Compare", type="primary", use_container_width=True):
+            if text1 and text2:
+                diff_html = tool.generate_diff_html(text1, text2)
+                components.html(diff_html, height=800, scrolling=True)
+            else:
+                st.warning("Please enter text in both fields to compare.")
+
+    # Footer
+    st.markdown("---")
+    st.markdown(
+        """
+        <div style='text-align: center; color: #666;'>
+            <small>
+                Professional File Comparison Tool | Built with Streamlit
+                <br>For support, please open an issue on the project repository
+            </small>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        logger.error(f"Application error: {str(e)}")
+        st.error("An unexpected error occurred. Please try again or contact support if the problem persists.")
