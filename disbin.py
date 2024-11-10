@@ -209,7 +209,7 @@ def main():
             st.markdown(
                 """
                 <div class="logo-container">
-                    <img src="data:image/png;base64,{}" width="50">
+                    <img src="data:image/png;base64,{}" width="10%">
                     <h1 class="header-text">📄 Professional File Comparison Tool</h1>
                 </div>
                 """.format(
@@ -218,7 +218,7 @@ def main():
                 unsafe_allow_html=True
             )
         else:
-            st.title("File Comparison Tool")
+            st.title("📄 Professional File Comparison Tool")
     with col2:
         st.caption(f"Version 1.0.0\nLast updated: {datetime.now().strftime('%Y-%m-%d')}")
 
@@ -252,7 +252,7 @@ def main():
                 # Load and validate files
                 file1_data, error1 = tool.load_file_content(file1)
                 file2_data, error2 = tool.load_file_content(file2)
-
+                
                 if error1 or error2:
                     st.error(f"Error: {error1 or error2}")
                 else:
@@ -265,7 +265,6 @@ def main():
                         components.html(diff_html, height=500)
             else:
                 st.warning("Please upload exactly two files for comparison.")
-
     else:
         st.text_area("Paste content from two files here for comparison", height=200)
 
