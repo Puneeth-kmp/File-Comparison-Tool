@@ -7,9 +7,6 @@ from typing import Tuple, Optional
 import io
 import logging
 from datetime import datetime
-import requests
-from PIL import Image
-from io import BytesIO
 
 # Configure logging
 logging.basicConfig(
@@ -147,20 +144,6 @@ class FileComparisonTool:
         html_content += "</table></div>"
         return html_content
 
-def load_github_image(url: str) -> Optional[Image.Image]:
-    """
-    Load an image from a GitHub repository
-    """
-    try:
-        # Convert GitHub blob URL to raw content URL
-        raw_url = url.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/')
-        response = requests.get(raw_url)
-        response.raise_for_status()  # Raise an exception for bad status codes
-        return Image.open(BytesIO(response.content))
-    except Exception as e:
-        logger.error(f"Error loading logo: {str(e)}")
-        return None
-
 def main():
     st.set_page_config(
         page_title="Professional File Comparison Tool",
@@ -187,28 +170,13 @@ def main():
                 padding: 1rem;
                 border-radius: 5px;
             }
-            .logo-container {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                margin-bottom: 1rem;
-            }
-            .logo-container img {
-                margin-right: 1rem;
-            }
         </style>
     """, unsafe_allow_html=True)
 
-    # Header with logo
+    # Header with version info
     col1, col2 = st.columns([3, 1])
     with col1:
-        logo_url = "https://github.com/Puneeth-kmp/File-Comparison-Tool/blob/main/Picsart_24-11-10_15-02-57-542.png"
-        logo = load_github_image(logo_url)
-        if logo:
-            st.image(logo, width=150)
-        else:
-            st.error("Unable to load logo. Using text header instead.")
-            st.title("📄 Professional File Comparison Tool")
+        st.title("📄 Professional File Comparison Tool")
     with col2:
         st.caption(f"Version 1.0.0\nLast updated: {datetime.now().strftime('%Y-%m-%d')}")
 
@@ -237,30 +205,78 @@ def main():
 
         if uploaded_files:
             if len(uploaded_files) == 2:
-                file1 = uploaded_files[0]
-                file2 = uploaded_files[1]
-
+                file1, file2 = uploaded_files
+                
+                # Load and validate files
                 file1_data, error1 = tool.load_file_content(file1)
                 file2_data, error2 = tool.load_file_content(file2)
 
                 if error1 or error2:
-                    st.error(f"Error loading files: {error1 or error2}")
+                    if error1:
+                        st.error(f"Error in first file: {error1}")
+                    if error2:
+                        st.error(f"Error in second file: {error2}")
                 else:
-                    if file1.name.endswith(tuple(SUPPORTED_TEXT_EXTENSIONS)):
-                        diff_html = tool.generate_diff_html(file1_data, file2_data)
-                        components.html(diff_html, height=500)
-                    else:
-                        st.text("Binary files cannot be diffed in this mode.")
+                    st.success("Files loaded successfully!")
+                    with st.expander("📊 File Information", expanded=True):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown(f"**File 1:** `{file1.name}`")
+                            st.caption(f"Size: {len(file1.getvalue()) / 1024:.1f} KB")
+                        with col2:
+                            st.markdown(f"**File 2:** `{file2.name}`")
+                            st.caption(f"Size: {len(file2.getvalue()) / 1024:.1f} KB")
+
+                    diff_html = tool.generate_diff_html(file1_data, file2_data)
+                    components.html(diff_html, height=800, scrolling=True)
             else:
-                st.error("Please upload exactly two files for comparison.")
+                st.warning("⚠️ Please upload exactly two files for comparison.")
 
-    elif input_method == "Paste Text":
-        text1 = st.text_area("Paste the first text for comparison")
-        text2 = st.text_area("Paste the second text for comparison")
+    else:  # Paste Text
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            text1 = st.text_area(
+                "Original Text",
+                height=300,
+                placeholder="Paste your first text here...",
+                help="Enter or paste the original text content"
+            )
+            name1 = st.text_input("Label for original text (optional)", "Original")
 
-        if text1 and text2:
-            diff_html = tool.generate_diff_html(text1, text2)
-            components.html(diff_html, height=500)
+        with col2:
+            text2 = st.text_area(
+                "Modified Text",
+                height=300,
+                placeholder="Paste your second text here...",
+                help="Enter or paste the modified text content"
+            )
+            name2 = st.text_input("Label for modified text (optional)", "Modified")
+
+        if st.button("🔍 Compare", type="primary", use_container_width=True):
+            if text1 and text2:
+                diff_html = tool.generate_diff_html(text1, text2)
+                components.html(diff_html, height=800, scrolling=True)
+            else:
+                st.warning("Please enter text in both fields to compare.")
+
+    # Footer
+    st.markdown("---")
+    st.markdown(
+        """
+        <div style='text-align: center; color: #666;'>
+            <small>
+                Professional File Comparison Tool | Built with Streamlit
+                <br>For support, please open an issue on the project repository
+            </small>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        logger.error(f"Application error: {str(e)}")
+        st.error("An unexpected error occurred. Please try again or contact support if the problem persists.")
